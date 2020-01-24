@@ -9,81 +9,134 @@
 import SpriteKit
 import GameplayKit
 
+struct CollisionCategories {
+    static let Snake: UInt32 = 0x1 << 0
+    static let SnakeHead: UInt32 = 0x1 << 1
+    static let Apple: UInt32 = 0x1 << 2
+    static let EdgeBody: UInt32 = 0x1 << 3
+    static let SnakeNeck: UInt32 = 0x1 << 4
+}
+
 class GameScene: SKScene {
     
-    private var label : SKLabelNode?
-    private var spinnyNode : SKShapeNode?
+    var snake: Snake?
+    
     
     override func didMove(to view: SKView) {
+        backgroundColor = SKColor.black
         
-        // Get label node from scene and store it for use later
-        self.label = self.childNode(withName: "//helloLabel") as? SKLabelNode
-        if let label = self.label {
-            label.alpha = 0.0
-            label.run(SKAction.fadeIn(withDuration: 2.0))
-        }
         
-        // Create shape node to use during mouse interaction
-        let w = (self.size.width + self.size.height) * 0.05
-        self.spinnyNode = SKShapeNode.init(rectOf: CGSize.init(width: w, height: w), cornerRadius: w * 0.3)
+        self.physicsWorld.gravity = CGVector(dx: 0, dy: 0)
+                
+        self.physicsBody = SKPhysicsBody(edgeLoopFrom: frame.insetBy(dx: -1, dy: -1))
+        self.physicsBody?.allowsRotation = false
         
-        if let spinnyNode = self.spinnyNode {
-            spinnyNode.lineWidth = 2.5
-            
-            spinnyNode.run(SKAction.repeatForever(SKAction.rotate(byAngle: CGFloat(Double.pi), duration: 1)))
-            spinnyNode.run(SKAction.sequence([SKAction.wait(forDuration: 0.5),
-                                              SKAction.fadeOut(withDuration: 0.5),
-                                              SKAction.removeFromParent()]))
-        }
+        view.showsPhysics = true
+        
+        let counterClockwiseButton = SKShapeNode()
+
+        counterClockwiseButton.path = UIBezierPath(ovalIn: CGRect(x: 0, y: 0, width: 60, height: 60)).cgPath
+        
+        counterClockwiseButton.position = CGPoint(x: view.scene!.frame.minX+3+25, y: view.scene!.frame.minY+30)
+        
+        counterClockwiseButton.fillColor = UIColor.gray
+        counterClockwiseButton.lineWidth = 5
+        
+        counterClockwiseButton.name = "counterClockwiseButton"
+        self.addChild(counterClockwiseButton)
+        
+        let clockwiseButton = SKShapeNode()
+
+        clockwiseButton.path = UIBezierPath(ovalIn: CGRect(x: 0, y: 0, width: 60, height: 60)).cgPath
+        
+        clockwiseButton.position = CGPoint(x: view.scene!.frame.maxX-63-25, y: view.scene!.frame.minY+30)
+        
+        clockwiseButton.fillColor = UIColor.gray
+        clockwiseButton.lineWidth = 5
+        
+        clockwiseButton.name = "clockwiseButton"
+        self.addChild(clockwiseButton)
+        createApple()
+        
+        snake = Snake(atPoint: CGPoint(x: view.scene!.frame.midX, y: view.scene!.frame.midY))
+        self.addChild(snake!)
+        self.physicsWorld.contactDelegate = self
+        
+        
+        self.physicsBody?.categoryBitMask = CollisionCategories.EdgeBody
+        self.physicsBody?.collisionBitMask = CollisionCategories.Snake | CollisionCategories.SnakeHead
     }
     
-    
-    func touchDown(atPoint pos : CGPoint) {
-        if let n = self.spinnyNode?.copy() as! SKShapeNode? {
-            n.position = pos
-            n.strokeColor = SKColor.green
-            self.addChild(n)
-        }
-    }
-    
-    func touchMoved(toPoint pos : CGPoint) {
-        if let n = self.spinnyNode?.copy() as! SKShapeNode? {
-            n.position = pos
-            n.strokeColor = SKColor.blue
-            self.addChild(n)
-        }
-    }
-    
-    func touchUp(atPoint pos : CGPoint) {
-        if let n = self.spinnyNode?.copy() as! SKShapeNode? {
-            n.position = pos
-            n.strokeColor = SKColor.red
-            self.addChild(n)
-        }
-    }
     
     override func touchesBegan(_ touches: Set<UITouch>, with event: UIEvent?) {
-        if let label = self.label {
-            label.run(SKAction.init(named: "Pulse")!, withKey: "fadeInOut")
+        for touch in touches {
+            let touchLocation = touch.location(in: self)
+            
+            guard let touchedNode = self.atPoint(touchLocation) as? SKShapeNode, touchedNode.name == "clockwiseButton" || touchedNode.name == "counterClockwiseButton" else {
+                return
+            }
+            
+            touchedNode.fillColor = UIColor.green
+            
+            if touchedNode.name == "clockwiseButton" {
+                snake!.moveClockwise()
+            } else if touchedNode.name == "counterClockwiseButton" {
+                snake!.moveCounterClockwise()
+            }
         }
-        
-        for t in touches { self.touchDown(atPoint: t.location(in: self)) }
     }
     
-    override func touchesMoved(_ touches: Set<UITouch>, with event: UIEvent?) {
-        for t in touches { self.touchMoved(toPoint: t.location(in: self)) }
-    }
     
     override func touchesEnded(_ touches: Set<UITouch>, with event: UIEvent?) {
-        for t in touches { self.touchUp(atPoint: t.location(in: self)) }
+        let leftButton = self.childNode(withName: "counterClockwiseButton") as? SKShapeNode
+        leftButton?.fillColor = UIColor.gray
+        
+        let rightButton = self.childNode(withName: "clockwiseButton") as? SKShapeNode
+        rightButton?.fillColor = UIColor.gray
+        
     }
     
     override func touchesCancelled(_ touches: Set<UITouch>, with event: UIEvent?) {
-        for t in touches { self.touchUp(atPoint: t.location(in: self)) }
+        
     }
     
     
     override func update(_ currentTime: TimeInterval) {
-        // Called before each frame is rendered
+        snake!.move()
+    }
+    
+    func createApple() {
+        let randX = CGFloat(arc4random_uniform(UInt32(view!.scene!.frame.maxX-20)) + 1)
+        let randY = CGFloat(arc4random_uniform(UInt32(view!.scene!.frame.maxY-20)) + 1)
+        let apple = Apple(position: CGPoint(x: randX, y: randY))
+        self.addChild(apple)
+    }
+}
+
+extension GameScene: SKPhysicsContactDelegate {
+    func didBegin(_ contact: SKPhysicsContact) {
+        let bodyes = contact.bodyA.categoryBitMask | contact.bodyB.categoryBitMask
+        let collisionObject = bodyes ^ CollisionCategories.SnakeHead
+        
+        switch collisionObject {
+        case CollisionCategories.Apple:
+            let apple = contact.bodyA.node is Apple ? contact.bodyA.node : contact.bodyB.node
+            snake?.addBodyPart()
+            apple?.removeFromParent()
+            createApple()
+            
+        case CollisionCategories.EdgeBody:
+            snake?.removeFromParent()
+            snake = Snake(atPoint: CGPoint(x: view!.scene!.frame.midX, y: view!.scene!.frame.midY))
+            self.addChild(snake!)
+            
+        case CollisionCategories.Snake:
+            snake?.removeFromParent()
+            snake = Snake(atPoint: CGPoint(x: view!.scene!.frame.midX, y: view!.scene!.frame.midY))
+            self.addChild(snake!)
+            
+        default:
+            break
+        }
     }
 }
